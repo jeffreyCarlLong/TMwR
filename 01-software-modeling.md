@@ -1,19 +1,6 @@
 # Software for modeling {#software-modeling}
 
-```{r software-setup, include = FALSE}
-knitr::opts_chunk$set(fig.path = "figures/")
-library(tidyverse)
-library(gridExtra)
-library(tibble)
-library(kableExtra)
 
-# install.packages("modeldata")
-# install.packages("bookdown")
-library(modeldata)
-library(bookdown)
-
-data(ames, package = "modeldata")
-```
 
 
 Models are mathematical tools that can describe a system and capture relationships in the data given to them. Models can be used for various purposes, including predicting future events, determining if there is a difference between several groups, aiding map-based visualization, discovering novel patterns in the data that could be further investigated, and more. The utility of a model hinges on its ability to be _reductive_. The primary influences in the data can be captured mathematically in a useful way, such as in a relationship that can be expressed as an equation. 
@@ -64,43 +51,10 @@ For example, large scale measurements of RNA have been possible for some time us
 
 An early method for evaluating such issues were _probe-level models_, or PLM's [@bolstad2004]. A statistical model would be created that accounted for the _known_ differences in the data, such as the chip, the RNA sequence, the type of sequence, and so on. If there were other, unknown factors in the data, these effects would be captured in the model residuals. When the residuals were plotted by their location on the chip, a good quality chip would show no patterns. When a problem did occur, some sort of spatial pattern would be discernible. Often the type of pattern would suggest the underlying issue (e.g. a fingerprint) and a possible solution (wipe the chip off and rescan, repeat the sample, etc.). Figure \@ref(fig:software-descr-examples)(a) shows an application of this method for two microarrays taken from @Gentleman2005. The images show two different colors; red is where the signal intensity was larger than the model expects while the blue color shows lower than expected values. The left-hand panel demonstrates a fairly random pattern while the right-hand panel exhibits an undesirable artifact in the middle of the chip. 
 
-```{r software-descr-examples, echo = FALSE, fig.cap = "Two examples of how descriptive models can be used to illustrate specific patterns.", out.width = '80%', dev = "png", fig.height = 8, warning = FALSE, message = FALSE}
-load("RData/plm_resids.RData")
-
-resid_cols <- RColorBrewer::brewer.pal(8, "Set1")[1:2]
-
-# Red is where intensity is higher than expected
-plm_plot <- 
-  plm_resids %>% 
-  mutate(sign = ifelse(Intensity < 0, "low", "high")) %>% 
-  ggplot(aes(x = x, y = y, fill = sign))  + 
-  geom_tile(show.legend = FALSE) + 
-  facet_wrap(~Sample) + 
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.background = element_blank(),
-    axis.text.x = element_blank(),
-    axis.text.y = element_blank(),
-    axis.ticks = element_blank()
-  ) + 
-  labs(x = "", y = "") + 
-  scale_fill_manual(values = c("#377EB8", "#E41A1C")) + 
-  coord_equal() + 
-  ggtitle("(a) Evaluating the quality of two microarray chips using a model.") + 
-  theme(plot.title = element_text(hjust = 0.5))
-
-
-ames_plot <- 
-  ggplot(ames, aes(x = Latitude, y = Sale_Price)) + 
-  geom_point(alpha = .2) + 
-  geom_smooth(se = FALSE, method = stats::loess, method.args = list(span = .3), col = "red") + 
-  scale_y_log10() + 
-  ylab("House Sale Price ($US)") + 
-  ggtitle("(b) Using a model-based smoother to discover trends.")
-
-grid.arrange(plm_plot, ames_plot, ncol = 1)
-```
+<div class="figure" style="text-align: center">
+<img src="figures/software-descr-examples-1.png" alt="Two examples of how descriptive models can be used to illustrate specific patterns." width="80%" />
+<p class="caption">(\#fig:software-descr-examples)Two examples of how descriptive models can be used to illustrate specific patterns.</p>
+</div>
 
 Another example of a descriptive model is the _locally estimated scatterplot smoothing_ model, more commonly known as LOESS [@cleveland1979]. Here, a smooth and flexible regression model is fit to a data set, usually with a single independent variable, and the fitted regression line is used to elucidate some trend in the data. These types of smoothers are used to discover potential ways to represent a variable in a model. This is demonstrated in Figure \@ref(fig:software-descr-examples)(b) where a nonlinear trend is illuminated by the flexible smoother. From this plot, it is clear that there is a highly nonlinear relationship between the sale price of a house and its latitude. 
 
@@ -189,15 +143,17 @@ Data cleaning can also overlap with the second phase of **understanding the data
 
 Finally, before starting a data analysis process, there should be clear expectations of the goal of the model and how performance (and success) will be judged. At least one _performance metric_ should be identified with realistic goals of what can be achieved. Common statistical metrics, discussed in more detail in Chapter \@ref(performance), are classification accuracy, true and false positive rates, root mean squared error, and so on. The relative benefits and drawbacks of these metrics should be weighed. It is also important that the metric be germane; alignment with the broader data analysis goals is critical. 
 
-```{r software-data-science-model, echo = FALSE, out.width = '80%', fig.cap = "The data science process (from R for Data Science).", warning = FALSE}
-knitr::include_graphics("premade/data-science-model.svg")
-```
+<div class="figure" style="text-align: center">
+<img src="premade/data-science-model.svg" alt="The data science process (from R for Data Science)." width="80%" />
+<p class="caption">(\#fig:software-data-science-model)The data science process (from R for Data Science).</p>
+</div>
 
 The process of investigating the data may not be simple. @wickham2016 contains an excellent illustration of the general data analysis process, reproduced with Figure \@ref(fig:software-data-science-model). Data ingestion and cleaning/tidying are shown as the initial steps. When the analytical steps for understanding commence, they are a heuristic process; we cannot pre-determine how long they may take. The cycle of analysis, modeling, and visualization often requires multiple iterations. 
 
-```{r software-modeling-process, echo = FALSE, out.width = '100%', fig.width=8, fig.height=3, fig.cap = "A schematic for the typical modeling process.", warning = FALSE}
-knitr::include_graphics("premade/modeling-process.svg")
-```
+<div class="figure" style="text-align: center">
+<img src="premade/modeling-process.svg" alt="A schematic for the typical modeling process." width="100%" />
+<p class="caption">(\#fig:software-modeling-process)A schematic for the typical modeling process.</p>
+</div>
 
 This iterative process is especially true for modeling. Figure \@ref(fig:software-modeling-process) is meant to emulate the typical path to determining an appropriate model. The general phases are:
 
@@ -213,62 +169,84 @@ After an initial sequence of these tasks, more understanding is gained regarding
 
 As an example, @fes use data to model the daily ridership of Chicago's public train system using predictors such as the date, the previous ridership results, the weather, and other factors. An approximation of these authors' "inner monologue" when analyzing these data is, in order:
 
-```{r software-monolog, echo = FALSE, results = 'as-is'}
-monolog <- 
-  tribble(
-    ~Activity, ~`Analysis Cycle`, ~Thoughts,
-    "EDA", "1",
-    "The daily ridership values between stations are extremely correlated.",
-    "EDA", " ",
-    "Weekday and weekend ridership look very different.",
-    "EDA", " ",
-    "One day in the summer of 2010 has an abnormally large number of riders.",
-    "EDA", "1",
-    "Which stations had the lowest daily ridership values?",
-    "Feature Engineering", "1",
-    "Dates should at least be encoded as day-of-the-week, and year. ",
-    "Feature Engineering", " ",
-    "Maybe PCA could be used on the correlated predictors to make it easier for the models to use them. ",
-    "Feature Engineering", " ",
-    "Hourly weather records should probably be summarized into daily measurements. ",
-    "Model Fitting", "1",
-    "Let’s start with simple linear regression, K-nearest neighbors, and a boosted decision tree. ",
-    "Model Tuning", "1",
-    "How many neighbors should be used?",
-    "Model Tuning", " ",
-    "Should we run a lot of boosting iterations or just a few?",
-    "Model Tuning", "2",
-    "How many neighbors seemed to be optimal for these data? ",
-    "Model Evaluation", "2",
-    "Which models have the lowest root mean squared errors? ",
-    "EDA", "2",
-    "Which days were poorly predicted? ",
-    "Model Evaluation", "2",
-    "Variable importance scores indicate that the weather information is not predictive. We’ll drop them from the next set of models. ",
-    "Model Evaluation", " ",
-    "It seems like we should focus on a lot of boosting iterations for that model.",
-    "Feature Engineering", "2", 
-    "We need to encode holiday features to improve predictions on (and around) those dates.",
-    "Model Evaluation", "2",
-    "Let’s drop K-NN from the model list. "
-  )
-if (knitr::is_html_output()) {
-  tab <- 
-    monolog %>% 
-    dplyr::select(Thoughts, Activity) %>% 
-    kable() %>%
-    kable_styling() %>% 
-    column_spec(2, width = "25%") %>%
-    column_spec(1, width = "75%", italic = TRUE)
-} else {
-  tab <- 
-    monolog %>% 
-    dplyr::select(Thoughts, Activity) %>% 
-    kable() %>%
-    kable_styling()
-}
-tab
-```
+<table class="table" style="margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> Thoughts </th>
+   <th style="text-align:left;"> Activity </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> The daily ridership values between stations are extremely correlated. </td>
+   <td style="text-align:left;width: 25%; "> EDA </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Weekday and weekend ridership look very different. </td>
+   <td style="text-align:left;width: 25%; "> EDA </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> One day in the summer of 2010 has an abnormally large number of riders. </td>
+   <td style="text-align:left;width: 25%; "> EDA </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Which stations had the lowest daily ridership values? </td>
+   <td style="text-align:left;width: 25%; "> EDA </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Dates should at least be encoded as day-of-the-week, and year. </td>
+   <td style="text-align:left;width: 25%; "> Feature Engineering </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Maybe PCA could be used on the correlated predictors to make it easier for the models to use them. </td>
+   <td style="text-align:left;width: 25%; "> Feature Engineering </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Hourly weather records should probably be summarized into daily measurements. </td>
+   <td style="text-align:left;width: 25%; "> Feature Engineering </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Let’s start with simple linear regression, K-nearest neighbors, and a boosted decision tree. </td>
+   <td style="text-align:left;width: 25%; "> Model Fitting </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> How many neighbors should be used? </td>
+   <td style="text-align:left;width: 25%; "> Model Tuning </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Should we run a lot of boosting iterations or just a few? </td>
+   <td style="text-align:left;width: 25%; "> Model Tuning </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> How many neighbors seemed to be optimal for these data? </td>
+   <td style="text-align:left;width: 25%; "> Model Tuning </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Which models have the lowest root mean squared errors? </td>
+   <td style="text-align:left;width: 25%; "> Model Evaluation </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Which days were poorly predicted? </td>
+   <td style="text-align:left;width: 25%; "> EDA </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Variable importance scores indicate that the weather information is not predictive. We’ll drop them from the next set of models. </td>
+   <td style="text-align:left;width: 25%; "> Model Evaluation </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> It seems like we should focus on a lot of boosting iterations for that model. </td>
+   <td style="text-align:left;width: 25%; "> Model Evaluation </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> We need to encode holiday features to improve predictions on (and around) those dates. </td>
+   <td style="text-align:left;width: 25%; "> Feature Engineering </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;width: 75%; font-style: italic;"> Let’s drop K-NN from the model list. </td>
+   <td style="text-align:left;width: 25%; "> Model Evaluation </td>
+  </tr>
+</tbody>
+</table>
 
 and so on. Eventually, a model is selected that is able to achieve sufficient performance.
 
@@ -278,7 +256,7 @@ This chapter focused on how models describe relationships in data, and different
 
 For all kinds of modeling, software for building models must support good scientific methodology and ease of use for practitioners from diverse backgrounds. The software we develop approaches this with the ideas and syntax of the tidyverse, which we introduce (or review) in Chapter \@ref(tidyverse). Chapter \@ref(base-r) is a quick tour of conventional base R modeling functions and summarize the unmet needs in that area. 
 
-After that, this book is separated into parts, starting with the basics of modeling with tidy data principles. The first part introduces an example data set on house prices and demonstrates how to use the fundamental tidymodels packages: `r pkg(recipes)`, `r pkg(parsnip)`, `r pkg(workflows)`, `r pkg(yardstick)`, and others. 
+After that, this book is separated into parts, starting with the basics of modeling with tidy data principles. The first part introduces an example data set on house prices and demonstrates how to use the fundamental tidymodels packages: <span class="pkg">recipes</span>, <span class="pkg">parsnip</span>, <span class="pkg">workflows</span>, <span class="pkg">yardstick</span>, and others. 
 
 The second part of the book moves forward with more details on the process of creating a good model. This includes creating good estimates of performance as well as tuning model parameters. 
 
