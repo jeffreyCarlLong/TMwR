@@ -437,7 +437,7 @@ library(tidymodels)
 #> x dplyr::lag()      masks stats::lag()
 #> x yardstick::spec() masks readr::spec()
 #> x recipes::step()   masks stats::step()
-#> • Use suppressPackageStartupMessages() to eliminate package startup messages
+#> • Use tidymodels_prefer() to resolve common conflicts.
 ```
 
 As an example of a naming conflict, before loading <span class="pkg">tidymodels</span>, invoking the `filter()` function will execute the function in the <span class="pkg">stats</span> package. After loading tidymodels, it will execute the <span class="pkg">dplyr</span> function of the same name. 

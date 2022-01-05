@@ -44,41 +44,41 @@ This book was written in [RStudio](http://www.rstudio.com/ide/) using [bookdown]
 
 |package         |version    |source                                                               |
 |:---------------|:----------|:--------------------------------------------------------------------|
-|applicable      |NA         |NA                                                                   |
-|av              |NA         |NA                                                                   |
-|baguette        |NA         |NA                                                                   |
-|beans           |NA         |NA                                                                   |
-|bestNormalize   |NA         |NA                                                                   |
+|applicable      |0.0.1.2    |CRAN (R 4.1.0)                                                       |
+|av              |0.6.0      |CRAN (R 4.1.0)                                                       |
+|baguette        |0.1.1      |CRAN (R 4.1.0)                                                       |
+|beans           |0.1.0      |CRAN (R 4.1.0)                                                       |
+|bestNormalize   |1.8.2      |CRAN (R 4.1.0)                                                       |
 |bookdown        |0.24       |CRAN (R 4.1.0)                                                       |
 |broom           |0.7.10     |CRAN (R 4.1.0)                                                       |
-|corrplot        |NA         |NA                                                                   |
-|corrr           |NA         |NA                                                                   |
-|Cubist          |NA         |NA                                                                   |
-|DALEXtra        |NA         |NA                                                                   |
+|corrplot        |0.92       |CRAN (R 4.1.0)                                                       |
+|corrr           |0.4.3      |CRAN (R 4.1.0)                                                       |
+|Cubist          |0.3.0      |CRAN (R 4.1.0)                                                       |
+|DALEXtra        |2.1.1      |CRAN (R 4.1.0)                                                       |
 |dials           |0.0.10     |CRAN (R 4.1.0)                                                       |
 |digest          |0.6.29     |CRAN (R 4.1.0)                                                       |
 |dimRed          |NA         |NA                                                                   |
-|discrim         |NA         |NA                                                                   |
+|discrim         |0.1.3      |CRAN (R 4.1.0)                                                       |
 |doMC            |1.3.7      |CRAN (R 4.1.0)                                                       |
 |dplyr           |1.0.7      |CRAN (R 4.1.0)                                                       |
-|earth           |NA         |NA                                                                   |
-|embed           |NA         |NA                                                                   |
+|earth           |5.3.1      |CRAN (R 4.1.0)                                                       |
+|embed           |0.1.5      |CRAN (R 4.1.0)                                                       |
 |fastICA         |NA         |NA                                                                   |
-|finetune        |NA         |NA                                                                   |
+|finetune        |0.1.0      |CRAN (R 4.1.0)                                                       |
 |forcats         |0.5.1      |CRAN (R 4.1.0)                                                       |
-|ggforce         |NA         |NA                                                                   |
+|ggforce         |0.3.3      |CRAN (R 4.1.0)                                                       |
 |ggplot2         |3.3.5      |CRAN (R 4.1.0)                                                       |
-|glmnet          |NA         |NA                                                                   |
+|glmnet          |4.1-3      |CRAN (R 4.1.0)                                                       |
 |gridExtra       |2.3        |CRAN (R 4.1.0)                                                       |
 |infer           |1.0.0      |CRAN (R 4.1.0)                                                       |
 |kableExtra      |1.3.4      |CRAN (R 4.1.0)                                                       |
-|kernlab         |NA         |NA                                                                   |
+|kernlab         |0.9-29     |CRAN (R 4.1.0)                                                       |
 |kknn            |1.3.1      |CRAN (R 4.1.0)                                                       |
 |klaR            |NA         |NA                                                                   |
 |knitr           |1.37       |CRAN (R 4.1.0)                                                       |
 |learntidymodels |NA         |NA                                                                   |
 |lime            |NA         |NA                                                                   |
-|lme4            |NA         |NA                                                                   |
+|lme4            |1.1-27.1   |CRAN (R 4.1.0)                                                       |
 |lubridate       |1.8.0      |CRAN (R 4.1.0)                                                       |
 |mda             |NA         |NA                                                                   |
 |mixOmics        |NA         |NA                                                                   |
@@ -87,9 +87,9 @@ This book was written in [RStudio](http://www.rstudio.com/ide/) using [bookdown]
 |nnet            |7.3-16     |CRAN (R 4.1.2)                                                       |
 |parsnip         |0.1.7      |CRAN (R 4.1.0)                                                       |
 |patchwork       |1.1.1      |CRAN (R 4.1.0)                                                       |
-|poissonreg      |NA         |NA                                                                   |
+|poissonreg      |0.1.1      |CRAN (R 4.1.0)                                                       |
 |prettyunits     |1.1.1      |CRAN (R 4.1.0)                                                       |
-|probably        |NA         |NA                                                                   |
+|probably        |0.0.6      |CRAN (R 4.1.0)                                                       |
 |pscl            |NA         |NA                                                                   |
 |purrr           |0.3.4      |CRAN (R 4.1.0)                                                       |
 |ranger          |0.13.1     |CRAN (R 4.1.0)                                                       |
@@ -98,20 +98,20 @@ This book was written in [RStudio](http://www.rstudio.com/ide/) using [bookdown]
 |rmarkdown       |2.11       |CRAN (R 4.1.2)                                                       |
 |rpart           |4.1-15     |CRAN (R 4.1.2)                                                       |
 |rsample         |0.1.1      |CRAN (R 4.1.0)                                                       |
-|rstanarm        |NA         |NA                                                                   |
-|rules           |NA         |NA                                                                   |
+|rstanarm        |2.21.1     |CRAN (R 4.1.0)                                                       |
+|rules           |0.1.2      |CRAN (R 4.1.0)                                                       |
 |sessioninfo     |1.2.2      |CRAN (R 4.1.0)                                                       |
-|stacks          |NA         |NA                                                                   |
+|stacks          |0.2.1      |CRAN (R 4.1.0)                                                       |
 |stringr         |1.4.0      |CRAN (R 4.1.0)                                                       |
 |svglite         |2.0.0      |CRAN (R 4.1.0)                                                       |
 |themis          |0.1.4.9000 |Github (tidymodels/themis\@b402b7768156be4feb1236ac9617104075c10995) |
 |tibble          |3.1.6      |CRAN (R 4.1.0)                                                       |
 |tidymodels      |0.1.4      |CRAN (R 4.1.0)                                                       |
-|tidyposterior   |NA         |NA                                                                   |
+|tidyposterior   |0.1.0      |CRAN (R 4.1.0)                                                       |
 |tidyverse       |1.3.1      |CRAN (R 4.1.0)                                                       |
 |tune            |0.1.6      |CRAN (R 4.1.0)                                                       |
-|uwot            |NA         |NA                                                                   |
+|uwot            |0.1.11     |CRAN (R 4.1.0)                                                       |
 |workflows       |0.2.4      |CRAN (R 4.1.0)                                                       |
 |workflowsets    |0.1.0      |CRAN (R 4.1.0)                                                       |
-|xgboost         |NA         |NA                                                                   |
+|xgboost         |1.5.0.2    |CRAN (R 4.1.0)                                                       |
 |yardstick       |0.0.9      |CRAN (R 4.1.0)                                                       |

@@ -1,31 +1,4 @@
-```{r iterative-setup, include = FALSE}
-knitr::opts_chunk$set(fig.path = "figures/")
-library(tidymodels)
-# install.packages("kernlab")
-library(kernlab)
-library(finetune)
-library(patchwork)
-library(kableExtra)
-library(av)
-library(doMC)
-registerDoMC(cores = parallel::detectCores(logical = TRUE))
-tidymodels_prefer()
 
-## -----------------------------------------------------------------------------
-
-source("extras/verify_results.R")
-source("extras/sa_2d_plot.R")
-source("extras/bo_3panel_plot.R")
-load(file.path("RData", "svm_large.RData"))
-
-## -----------------------------------------------------------------------------
-
-data(cells)
-cells <- cells %>% select(-case)
-set.seed(33)
-cell_folds <- vfold_cv(cells)
-roc_res <- metric_set(roc_auc)
-```
 
 # Iterative search {#iterative-search}
 
@@ -47,7 +20,8 @@ The SVM model uses a dot-product and, for this reason, it is necessary to center
 
 Along with the previously used objects (shown in Section \@ref(grid-summary)), the following tidymodels objects define the model process: 
 
-```{r iterative-svm-defs, message = FALSE}
+
+```r
 library(tidymodels)
 tidymodels_prefer()
 
@@ -69,14 +43,22 @@ svm_wflow <-
 
 The default parameter ranges for these two tuning parameters are: 
 
-```{r iterative-svm-param}
+
+```r
 cost()
+#> Cost (quantitative)
+#> Transformer:  log-2 
+#> Range (transformed scale): [-10, 5]
 rbf_sigma()
+#> Radial Basis Function sigma (quantitative)
+#> Transformer:  log-10 
+#> Range (transformed scale): [-10, 0]
 ```
 
 For illustration, let's slightly change the kernel parameter range, to improve the visualizations of the search: 
 
-```{r iterative-svm-param-set}
+
+```r
 svm_param <- 
   svm_wflow %>% 
   parameters() %>% 
@@ -87,14 +69,12 @@ Before discussing specific details about iterative search and how it works, let'
 
 The plot below shows the results, with lighter color corresponding to higher (better) model performance. There is a large swath in the lower diagonal of the parameter space that is relatively flat with poor performance. A ridge of best performance occurs in the upper right portion of the space. The black dot indicates the best settings. The transition from the plateau of poor results to the ridge of best performance is very sharp. There is also a sharp drop in the area under the ROC curve just to the right of the ridge.
 
-```{r iterative-roc-surface, out.width = "80%", echo = FALSE, warning = FALSE}
-# See file extras/cells_svm_large.R
-knitr::include_graphics("premade/roc_surface.png")
-```
+<img src="premade/roc_surface.png" width="80%" style="display: block; margin: auto;" />
 
 The search procedures described below require at least some resampled performance statistics before proceeding. For this purpose, the code below creates a small regular grid that resides in the flat portion of the parameter space. The `tune_grid()` function resamples these values:  
 
-```{r iterative-svm-initial, message = FALSE}
+
+```r
 set.seed(234)
 start_grid <- 
   svm_param %>% 
@@ -110,6 +90,13 @@ svm_initial <-
   tune_grid(resamples = cell_folds, grid = start_grid, metrics = roc_res)
 
 collect_metrics(svm_initial)
+#> # A tibble: 4 × 8
+#>     cost rbf_sigma .metric .estimator  mean     n std_err .config             
+#>    <dbl>     <dbl> <chr>   <chr>      <dbl> <int>   <dbl> <chr>               
+#> 1 0.0156  0.000001 roc_auc binary     0.865    10 0.00845 Preprocessor1_Model1
+#> 2 2       0.000001 roc_auc binary     0.863    10 0.00844 Preprocessor1_Model2
+#> 3 0.0156  0.0001   roc_auc binary     0.863    10 0.00842 Preprocessor1_Model3
+#> 4 2       0.0001   roc_auc binary     0.866    10 0.00808 Preprocessor1_Model4
 ```
 
 This initial grid shows fairly equivalent results, with no individual point much better than any of the others. These results can be ingested by the iterative tuning functions we discuss in the following sections to be used as initial values. 
@@ -124,17 +111,43 @@ When using Bayesian optimization, the primary concerns are how to create the mod
 
 Gaussian process (GP) [@SCHULZ20181] models are well-known statistical techniques that have a history in spatial statistics (under the name of _kriging methods_). They can be derived in multiple ways, including as a Bayesian model; see @RaWi06 for an excellent reference. 
 
-Mathematically, a GP is a collection of random variables whose joint probability distribution is  multivariate Gaussian. In the  context of our application, this collection is the collection of performance metrics for the tuning parameter candidate values. For the initial grid of four samples shown above, the realization of these four random variables were `r knitr::combine_words(round(collect_metrics(svm_initial)$mean, 4))`. These are assumed to be distributed as multivariate Gaussian. The _inputs_ that  define the independent variables/predictors for the GP model are the corresponding tuning parameter values: 
+Mathematically, a GP is a collection of random variables whose joint probability distribution is  multivariate Gaussian. In the  context of our application, this collection is the collection of performance metrics for the tuning parameter candidate values. For the initial grid of four samples shown above, the realization of these four random variables were 0.8646, 0.8632, 0.8633, and 0.8663. These are assumed to be distributed as multivariate Gaussian. The _inputs_ that  define the independent variables/predictors for the GP model are the corresponding tuning parameter values: 
 
-```{r iterative-gp-data-table, echo = FALSE, results = "asis"}
-collect_metrics(svm_initial) %>% 
-  select(ROC = mean, cost, rbf_sigma) %>% 
-  as.data.frame() %>% 
-  format(digits = 4, scientific = FALSE) %>% 
-  kable() %>% 
-  kableExtra::kable_styling(full_width = FALSE) %>% 
-  kableExtra::add_header_above(c("outcome" = 1, "predictors" = 2))
-```
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+ <thead>
+<tr>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="1"><div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">outcome</div></th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2"><div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">predictors</div></th>
+</tr>
+  <tr>
+   <th style="text-align:left;"> ROC </th>
+   <th style="text-align:left;"> cost </th>
+   <th style="text-align:left;"> rbf_sigma </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> 0.8646 </td>
+   <td style="text-align:left;"> 0.01562 </td>
+   <td style="text-align:left;"> 0.000001 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> 0.8632 </td>
+   <td style="text-align:left;"> 2.00000 </td>
+   <td style="text-align:left;"> 0.000001 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> 0.8633 </td>
+   <td style="text-align:left;"> 0.01562 </td>
+   <td style="text-align:left;"> 0.000100 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> 0.8663 </td>
+   <td style="text-align:left;"> 2.00000 </td>
+   <td style="text-align:left;"> 0.000100 </td>
+  </tr>
+</tbody>
+</table>
 
 Gaussian process models are specified by their mean and covariance functions, although the latter has the most effect on the nature of the GP model. The covariance function is often parameterized in terms of the input values (denoted as $x$ below). As an example, a commonly used covariance function is the squared exponential^[This equation is also the same as the _radial basis function_ used in kernel methods, such as the SVM model that is currently being used. This is a coincidence; this covariance function is unrelated to the SVM tuning parameter that we are using. ] function: 
 
@@ -153,20 +166,33 @@ However, fitting these models can be difficult in some cases and the model becom
 
 An important virtue of this model is that, since a full probability model is specified, the predictions for new inputs can reflect the entire _distribution_ of the outcome. In other words, new performance statistics can be predicted in terms of both mean and variance. 
 
-Suppose that two new tuning parameters were under consideration. In the table below, candidate _A_ has a slightly better mean ROC value than candidate _B_ (the current best is `r round(max(collect_metrics(svm_initial)$mean), 4)`). However, its variance is four-fold larger than _B_. Is this good or bad? Choosing option _A_ is riskier but has potentially higher return. The increase in variance also reflects that this new value is further away from the existing data than _B_. The next section considers these aspects of GP predictions for Bayesian optimization in more detail.
+Suppose that two new tuning parameters were under consideration. In the table below, candidate _A_ has a slightly better mean ROC value than candidate _B_ (the current best is 0.8663). However, its variance is four-fold larger than _B_. Is this good or bad? Choosing option _A_ is riskier but has potentially higher return. The increase in variance also reflects that this new value is further away from the existing data than _B_. The next section considers these aspects of GP predictions for Bayesian optimization in more detail.
 
-```{r iterative-gp-pred, echo = FALSE, result = "asis"}
-best_val <- max(collect_metrics(svm_initial)$mean)
-tmp <- tibble(candidate = LETTERS[1:2], .mean = c(.90, .89), .sd = c(0.02, 0.005))
-tmp %>% 
-  select(candidate, mean = .mean, variance = .sd) %>% 
-  mutate(variance = variance^2) %>% 
-  as.data.frame() %>% 
-  format(digits = 4, scientific = FALSE) %>% 
-  kable() %>% 
-  kableExtra::kable_styling(full_width = FALSE) %>% 
-  kableExtra::add_header_above(c(" " = 1, "GP Prediction of ROC AUC" = 2))
-```
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+ <thead>
+<tr>
+<th style="empty-cells: hide;border-bottom:hidden;" colspan="1"></th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2"><div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">GP Prediction of ROC AUC</div></th>
+</tr>
+  <tr>
+   <th style="text-align:left;"> candidate </th>
+   <th style="text-align:left;"> mean </th>
+   <th style="text-align:left;"> variance </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> A </td>
+   <td style="text-align:left;"> 0.90 </td>
+   <td style="text-align:left;"> 0.000400 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> B </td>
+   <td style="text-align:left;"> 0.89 </td>
+   <td style="text-align:left;"> 0.000025 </td>
+  </tr>
+</tbody>
+</table>
 
 :::rmdnote
 Bayesian optimization is an iterative process. 
@@ -184,191 +210,69 @@ A class of objective functions, called _acquisition functions_, facilitate the t
 
 * _Exploitation_ principally relies on the mean prediction to find the best (mean) value. It focuses on existing results. 
 
-```{r iterative-aq-data, include = FALSE}
-source("extras/nonlinear_function.R")
-grid <- 
-  tibble(x = seq(0, 1, length.out = 200)) %>% 
-  mutate(y = purrr::map_dbl(x, nonlin_function, error = FALSE))
 
-set.seed(121)
-current_iter <- tibble(x = c(.09, .41,  .55, .7, .8)) %>% 
-  mutate(y = purrr::map_dbl(x, nonlin_function))
 
-gp <- GPfit::GP_fit(matrix(current_iter$x, ncol = 1), current_iter$y)
+To demonstrate, let's look at a toy example with a single parameter that has values between [0, 1] and the performance metric is $R^2$. The true function is shown below in red along with 5 candidate values that have existing results. 
 
-gp_pred <- 
-  predict(gp, matrix(grid$x, ncol = 1))$complete_data %>% 
-  as_tibble() %>% 
-  setNames(c("x", ".mean", ".sd"))  %>% 
-  mutate(.sd = sqrt(.sd))
-
-gp_pred <- 
-  gp_pred %>% 
-  bind_cols(
-    exp_improve() %>% 
-      predict(gp_pred, maximize = TRUE, iter = 1, best = max(current_iter$y)) %>% 
-      setNames("exp_imp")
-  ) %>% 
-  bind_cols(
-    conf_bound(kappa = .1) %>% 
-      predict(gp_pred, maximize = TRUE, iter = 1, best = max(current_iter$y)) %>% 
-      setNames("conf_int_01")
-  ) %>% 
-  bind_cols(
-    conf_bound(kappa = 1) %>% 
-      predict(gp_pred, maximize = TRUE, iter = 1, best = max(current_iter$y)) %>% 
-      setNames("conf_int_1")
-  )
-```
-
-To demonstrate, let's look at a toy example with a single parameter that has values between [0, 1] and the performance metric is $R^2$. The true function is shown below in red along with `r nrow(current_iter)` candidate values that have existing results. 
-
-```{r iterative-aq-plot, echo = FALSE, fig.height = 4}
-ggplot(grid, aes(x = x, y = y)) + 
-  geom_line(col = "red", alpha = .5, lwd = 1.25) + 
-  labs(y = expression(paste("Estimated ", R^2)), x = "Tuning Parameter") +
-  geom_point(data = current_iter)
-```
+<img src="figures/iterative-aq-plot-1.svg" width="672" style="display: block; margin: auto;" />
 
 For these data, the GP model model fit is shown below. The shaded region indicates the mean $\pm$ 1 standard error. The two vertical lines indicate two candidate points that are examined in more detail below.
 
 The shaded confidence region demonstrates the squared exponential variance function; it becomes very large between points and converges to zero at the existing data points. 
 
-```{r iterative-gp-fit, echo = FALSE, fig.height = 4}
-gp_pred %>% 
-  ggplot(aes(x = x)) + 
-  geom_point(data = current_iter, aes(y = y)) + 
-  geom_line(aes(y = .mean)) +
-  geom_vline(xintercept = c(0.1, 0.25), lty = 2, alpha = .5) + 
-  geom_ribbon(aes(ymin = .mean -  1 * .sd, ymax = .mean + 1 * .sd), alpha = .1) + 
-  labs(y = expression(paste("Estimated ", R^2)), x = "Tuning Parameter")
-```
+<img src="figures/iterative-gp-fit-1.svg" width="672" style="display: block; margin: auto;" />
 
 This nonlinear trend passes through each observed point but the model is not perfect. There are no observed points near the true optimum setting and, in this region, the fit could be much better. Despite this, the GP model can effectively point us in the right direction. 
 
-From a pure exploitation standpoint, the best choice would select the parameter value that has the best mean prediction. Here, this would be a value of `r round(gp_pred$x[which.max(gp_pred$.mean)], 3)`, just to the right of the existing best observed point at 0.09. 
+From a pure exploitation standpoint, the best choice would select the parameter value that has the best mean prediction. Here, this would be a value of 0.106, just to the right of the existing best observed point at 0.09. 
 
-As a way to encourage exploration, a simple (but not often used) approach is to find the tuning parameter associated with the largest confidence interval. For example, by using a single standard deviation for the $R^2$ confidence bound, the next point to sample would be `r round(gp_pred$x[which.max(gp_pred$conf_int_1)], 3)`. This is slightly more into the region with no observed results. Increasing the number of standard deviations used in the upper bound would push the selection further into empty regions. 
+As a way to encourage exploration, a simple (but not often used) approach is to find the tuning parameter associated with the largest confidence interval. For example, by using a single standard deviation for the $R^2$ confidence bound, the next point to sample would be 0.236. This is slightly more into the region with no observed results. Increasing the number of standard deviations used in the upper bound would push the selection further into empty regions. 
 
 One of the most commonly used acquisition functions is _expected improvement_. The notion of improvement requires a value for the current best results (unlike the confidence bound approach). Since the GP can describe a new candidate point using a distribution, we can weight the parts of the distribution that show improvement using the probability of the improvement occurring. 
 
 For example, consider two candidate parameter values of 0.10 and 0.25 (indicated by the vertical lines in the plot above). Using the fitted GP model, their predicted $R^2$ distributions are shown below along with a reference line for the current best results:
 
-```{r iterative-exp-imp, echo = FALSE, fig.height = 4, fig.width = 6.25, out.width = "100%"}
-small_pred <- 
-  predict(gp, c(0.1, 0.25))$complete_data %>% 
-  as_tibble() %>% 
-  setNames(c("x", ".mean", ".sd")) %>% 
-  mutate(
-    value = c(0.1, 0.25),
-    .sd = sqrt(.sd),
-    max = .mean + 3 * .sd,
-    min = .mean - 3 * .sd
-  )
-
-small_pred <- 
-  small_pred %>% 
-  bind_cols(
-    exp_improve() %>% 
-      predict(small_pred, maximize = TRUE, iter = 1, best = max(current_iter$y)) %>% 
-      setNames("exp_imp")
-  )
-
-get_density <- function(dat) {
-  res <- tibble(x = seq(dat$min, dat$max, length.out = 200)) %>% 
-    mutate(density = dnorm(x, dat$.mean, dat$.sd),
-           `Parameter Value` = format(dat$value))
-  res
-}
-
-small_pred %>% 
-  group_by(value) %>% 
-  do(get_density(.)) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = x, y = density, col = `Parameter Value`)) + 
-  geom_line() +
-  geom_vline(xintercept = max(current_iter$y), lty = 2) + 
-  labs(x = expression(paste("Predicted ", R^2, " Distribution"))) + 
-  scale_color_brewer(palette = "Set1")
-```
+<img src="figures/iterative-exp-imp-1.svg" width="100%" style="display: block; margin: auto;" />
 
 When only considering the mean $R^2$ prediction, a parameter value of 0.10 is the better choice. The tuning parameter recommendation for 0.25 is, on average, predicted to be _worse_ than the current best. However, since it has higher variance, it has more overall probability area above the current best. As a result, it has a larger expected improvement of the two:
 
-```{r iterative-gp-data-table-2, echo = FALSE, results = "asis"}
-small_pred %>% 
-  select(`Parameter Value` = x, Mean = .mean, `Std Dev` = .sd, `Expected Improvment` = exp_imp) %>% 
-  as.data.frame() %>% 
-  format(digits = 4, scientific = FALSE) %>% 
-  kable() %>% 
-  kableExtra::kable_styling(full_width = FALSE) %>% 
-  kableExtra::add_header_above(c(" " = 1, "Predictions" = 3))
-```
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+ <thead>
+<tr>
+<th style="empty-cells: hide;border-bottom:hidden;" colspan="1"></th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="3"><div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">Predictions</div></th>
+</tr>
+  <tr>
+   <th style="text-align:left;"> Parameter Value </th>
+   <th style="text-align:left;"> Mean </th>
+   <th style="text-align:left;"> Std Dev </th>
+   <th style="text-align:left;"> Expected Improvment </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> 0.10 </td>
+   <td style="text-align:left;"> 0.8679 </td>
+   <td style="text-align:left;"> 0.0004317 </td>
+   <td style="text-align:left;"> 0.000190 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> 0.25 </td>
+   <td style="text-align:left;"> 0.8671 </td>
+   <td style="text-align:left;"> 0.0039301 </td>
+   <td style="text-align:left;"> 0.001216 </td>
+  </tr>
+</tbody>
+</table>
 
 When expected improvement is computed across the range of the tuning parameter, the recommended point to sample  is much closer to 0.25 than 0.10: 
 
-```{r iterative-exp-imp-profile, echo = FALSE, fig.height = 5.5, out.width="100%"}
-p1 <- 
-  gp_pred %>% 
-  ggplot(aes(x = x)) + 
-  geom_point(data = current_iter, aes(y = y)) + 
-  geom_line(aes(y = .mean)) +
-  geom_ribbon(aes(ymin = .mean -  1 * .sd, ymax = .mean + 1 * .sd), alpha = .1) + 
-  labs(y = expression(paste("Estimated ", R^2)), x = NULL) + 
-  theme(
-    axis.title.x=element_blank(),
-    axis.text.x=element_blank(),
-    axis.ticks.x=element_blank(), 
-    plot.margin = unit(c(0, 0, 0, 0), "null")
-  )
-
-p2 <- 
-  gp_pred %>% 
-  ggplot(aes(x = x, y = exp_imp)) + 
-  geom_line() + 
-  labs(y = "Expected Improvement", x = "Tuning Parameter") + 
-  theme(plot.margin = unit(c(0, 0, 0, 0), "null")) +
-  geom_vline(xintercept = gp_pred$x[which.max(gp_pred$exp_imp)], lty = 2)
-
-p1/p2
-```
+<img src="figures/iterative-exp-imp-profile-1.svg" width="100%" style="display: block; margin: auto;" />
 
 
 Numerous acquisition functions have been discussed in the literature. For tidymodels, expected improvement is the default. 
 
-```{r iterative-cells-bo-calcs, echo = FALSE}
-# We will do the calculations here but use some non-standard options. First, 
-# purrr is used to capture the output in a vector so that we can show the 
-# results piecemeal. Also, a hidden option is used to save the grid of candidate 
-# values for each iteration of the search. These will be used to make an 
-# animation in a later chunk. 
-# 
-# This means that any changes to this chunk have to be made to the next chunk 
-# (where the code is shown and not executed).
 
-ctrl <- control_bayes(verbose = TRUE)
-ctrl$save_gp_scoring <- TRUE
-
-tune_bayes_sssshhh <- purrr::quietly(tune_bayes)
-
-set.seed(1234)
-svm_bo_sshh <-
-  svm_wflow %>%
-  tune_bayes_sssshhh(
-    resamples = cell_folds,
-    metrics = roc_res,
-    initial = svm_initial,
-    param_info = svm_param,
-    iter = 25,
-    control = ctrl
-  )
-
-svm_bo <- svm_bo_sshh$result
-verify_consistent_bo(svm_bo)
-svm_bo_output <- svm_bo_sshh$messages
-
-gp_candidates <- collect_gp_results(svm_bo)
-save(gp_candidates, file = "RData/gp_candidates.RData")
-```
 
 ### The `tune_bayes()` function {#tune-bayes}
 
@@ -378,7 +282,7 @@ To implement iterative search via Bayesian optimization, use the `tune_bayes()` 
 
 * `initial` can be either an integer, an object produced using `tune_grid()`, or one of the racing functions. Using an integer specifies the size of a space-filling design that is sampled prior to the first GP model. 
 
-* `objective` is an argument for which acquisition function should be used. The `r pkg(tune)` package contains functions to pass here, such as `exp_improve()` or `conf_bound()`. 
+* `objective` is an argument for which acquisition function should be used. The <span class="pkg">tune</span> package contains functions to pass here, such as `exp_improve()` or `conf_bound()`. 
 
 * The `param_info` argument, in this case, specifies the range of the parameters as well as any transformations that are used. These are used to define the search space. In situations where the default parameter objects are insufficient, `param_info` is used to override the defaults. 
 
@@ -392,7 +296,8 @@ The `control` argument now uses the results of `control_bayes()`. Some helpful a
 
 Let's use the first SVM results from Section \@ref(svm) as the initial substrate for the Gaussian process model. Recall that, for this application, we want to maximize the area under the ROC curve. Our code is: 
 
-```{r iterative-cells-bo, eval = FALSE}
+
+```r
 ctrl <- control_bayes(verbose = TRUE)
 
 set.seed(1234)
@@ -409,138 +314,103 @@ svm_bo <-
 ```
 
 
-```{r iterative-cells-info, include = FALSE}
-bo_res <- collect_metrics(svm_bo) %>% mutate(current_best = FALSE)
-for(i in 1:nrow(bo_res)) {
-  bo_res$current_best[i] <- bo_res$mean[i] > max(bo_res$mean[1:(i-1)])
-}
-init_vals <- bo_res %>% dplyr::filter(.iter == 0)
-best_init <- max(bo_res$mean[bo_res$.iter == 0])
-best_bo <- max(bo_res$mean)
-best_bo_iter <- bo_res$.iter[which.max(bo_res$mean)]
-new_best_iter <- bo_res$.iter[which(bo_res$current_best)]
-new_best_iter <- new_best_iter[new_best_iter > 0]
-num_improve <- length(new_best_iter)
-last_iter <- max(collect_metrics(svm_bo)$.iter)
 
-iter_1_roc <- bo_res$mean[bo_res$.iter == 1]
-iter_1_imp <- iter_1_roc > best_init
-iter_1_text <- 
-  paste0(
-    ifelse(iter_1_imp, "showed an improvement, resulting in an ROC value of ",
-           "failed to improve the outcome with an ROC value of "),
-    round(iter_1_roc, 5), "."
-  )
 
-iter_2_roc <- bo_res$mean[bo_res$.iter == 2]
-iter_2_imp <- iter_2_roc > max(bo_res$mean[bo_res$.iter < 2])
-iter_2_text <- 
-  dplyr::case_when(
-    !iter_1_imp &  !iter_2_imp ~ 
-      paste0("the second iteration also failed to yield an improvement."),
-    !iter_1_imp &   iter_2_imp ~ 
-      paste0("the second iteration did yield a better result with an area under the ROC curve of ", 
-             round(iter_2_roc, 5), "."),
-    iter_1_imp &  !iter_2_imp ~ 
-      paste0("the second iteration did not continue the trend with a suboptimal ROC value of ",
-             round(iter_2_roc, 5), "."),
-    iter_1_imp &  !iter_2_imp ~ 
-      paste0("the second iteration further increased the outcome value (ROC = ",
-             round(iter_2_roc, 5), ").") 
-  )
-
-if (num_improve > 1) {
-  improve_text <-
-    paste0(
-      "There were a total of ",
-      num_improve,
-      " improvements in the outcome along the way at iterations ",
-      knitr::combine_words(new_best_iter),
-      "."
-    )
-} else {
-  improve_text <-
-    paste0("There was only a single improvement in the outcome at iteration ",
-           new_best_iter,
-           ".")
-}
-
-if (last_iter < 25) {
-  last_bo_text <-
-    paste0(
-      "There were no more improvements and the default option is to stop if no progress is made after `no_improve = ",
-      ctrl$no_improve,
-      "` more steps. The last step was:"
-    )
-} else {
-  last_bo_text <- "The last step was:"
-}
-```
-
-The search process starts with an initial best value of `r round(best_init, 5)` for the area under the ROC curve. A Gaussian process model uses these `r nrow(init_vals)` statistics to create a model. The large candidate set is automatically generated and scored using the expected improvement acquisition function. The first iteration `r iter_1_text` After fitting another Gaussian process model with the new outcome value, `r iter_2_text`
+The search process starts with an initial best value of 0.8663 for the area under the ROC curve. A Gaussian process model uses these 4 statistics to create a model. The large candidate set is automatically generated and scored using the expected improvement acquisition function. The first iteration failed to improve the outcome with an ROC value of 0.86402. After fitting another Gaussian process model with the new outcome value, the second iteration also failed to yield an improvement.
 
 The log of the first two iterations, produced by the `verbose` option, was: 
 
-```{r iterative-cells-bo-print-first, echo = FALSE}
-so_stop_index <- grep("Iteration 3", svm_bo_output) 
-if (length(so_stop_index) > 0) {
-  cat(svm_bo_output[1:(so_stop_index - 2)], sep = "")
-}
-```
-The search continues. `r improve_text` The best result occurred at iteration `r max(new_best_iter)` with an area under the ROC curve of `r round(best_bo, 5)`. 
 
-```{r iterative-cells-bo-print-impr, echo = FALSE}
-all_imp_index <- grep("♥", svm_bo_output)
-so_stop_index <- all_imp_index[length(all_imp_index)]
-if (length(all_imp_index) > 0) {
-  so_start_index <- so_stop_index - 10
-  cat(svm_bo_output[so_start_index:(so_stop_index + 1)], sep = "")
-}
 ```
-`r last_bo_text` 
+#> Optimizing roc_auc using the expected improvement
+#> 
+#> ── Iteration 1 ──────────────────────────────────────────────────────────────────────
+#> 
+#> i Current best:		roc_auc=0.8663 (@iter 0)
+#> i Gaussian process model
+#> ✓ Gaussian process model
+#> i Generating 5000 candidates
+#> i Predicted candidates
+#> i cost=0.386, rbf_sigma=0.000266
+#> i Estimating performance
+#> ✓ Estimating performance
+#> ⓧ Newest results:	roc_auc=0.864 (+/-0.00829)
+#> 
+#> ── Iteration 2 ──────────────────────────────────────────────────────────────────────
+#> 
+#> i Current best:		roc_auc=0.8663 (@iter 0)
+#> i Gaussian process model
+#> ✓ Gaussian process model
+#> i Generating 5000 candidates
+#> i Predicted candidates
+#> i cost=13.8, rbf_sigma=7.83e-07
+#> i Estimating performance
+#> ✓ Estimating performance
+#> ⓧ Newest results:	roc_auc=0.863 (+/-0.00836)
+```
+The search continues. There were a total of 7 improvements in the outcome along the way at iterations 3, 4, 5, 6, 8, 9, and 12. The best result occurred at iteration 12 with an area under the ROC curve of 0.9004. 
 
-```{r iterative-cells-bo-print-last, echo = FALSE}
-so_start <- paste("Iteration", last_iter)
-so_start_index <- grep(so_start, svm_bo_output)
-if (length(so_start_index) > 0) {
-  cat(svm_bo_output[so_start_index:length(svm_bo_output)], sep = "")
-}
+
+```
+#> ── Iteration 12 ─────────────────────────────────────────────────────────────────────
+#> 
+#> i Current best:		roc_auc=0.8998 (@iter 9)
+#> i Gaussian process model
+#> ✓ Gaussian process model
+#> i Generating 5000 candidates
+#> i Predicted candidates
+#> i cost=31, rbf_sigma=0.00118
+#> i Estimating performance
+#> ✓ Estimating performance
+#> ♥ Newest results:	roc_auc=0.9004 (+/-0.00688)
+```
+There were no more improvements and the default option is to stop if no progress is made after `no_improve = 10` more steps. The last step was: 
+
+
+```
+#> ── Iteration 22 ─────────────────────────────────────────────────────────────────────
+#> 
+#> i Current best:		roc_auc=0.9004 (@iter 12)
+#> i Gaussian process model
+#> ✓ Gaussian process model
+#> i Generating 5000 candidates
+#> i Predicted candidates
+#> i cost=30.6, rbf_sigma=0.00125
+#> i Estimating performance
+#> ✓ Estimating performance
+#> ⓧ Newest results:	roc_auc=0.9003 (+/-0.0069)
+#> ! No improvement for 10 iterations; returning current results.
 ```
 
 The functions that are used to interrogate the results are the same as those used for grid search (e.g., `collect_metrics()`, etc.). For example: 
 
-```{r iterative-bo-best}
+
+```r
 show_best(svm_bo)
+#> # A tibble: 5 × 9
+#>    cost rbf_sigma .metric .estimator  mean     n std_err .config .iter
+#>   <dbl>     <dbl> <chr>   <chr>      <dbl> <int>   <dbl> <chr>   <int>
+#> 1  31.0   0.00118 roc_auc binary     0.900    10 0.00688 Iter12     12
+#> 2  30.6   0.00125 roc_auc binary     0.900    10 0.00690 Iter22     22
+#> 3  30.8   0.00129 roc_auc binary     0.900    10 0.00690 Iter19     19
+#> 4  29.7   0.00148 roc_auc binary     0.900    10 0.00682 Iter9       9
+#> 5  29.4   0.00193 roc_auc binary     0.899    10 0.00658 Iter10     10
 ```
 
 The `autoplot()` function has several options for iterative search methods. One shows how the outcome changed over the search: 
 
-```{r iterative-bo-iter, fig.height = 4}
+
+```r
 autoplot(svm_bo, type = "performance")
 ```
+
+<img src="figures/iterative-bo-iter-1.svg" width="672" style="display: block; margin: auto;" />
 
 An additional type of plot uses `type = "parameters"`  which shows the parameter values over iterations.
 
 The animation below visualizes the results of the search. The black $\times$ values show the starting values contained in `svm_initial`. The top-left blue panel shows the _predicted_ mean value of the area under the ROC curve. The red panel on the top-right displays the _predicted_ variation in the ROC values while the bottom plot visualizes the expected improvement. In each panel, darker colors indicate less attractive values (e.g., small mean values, large variation, and small improvements).  
 
-```{r iterative-bo-progress, include = FALSE}
-# If caching was turned on for the 'iterative-cells-bo-calcs' chunk, the version
-# of the GP results in tempdir will not be available so we use the last copy in 
-# the 'RData' path. 
 
-if (!exists("gp_candidates")) {
-  load("RData/gp_candidates.RData")
-}
-av_capture_graphics(
-  make_bo_animation(gp_candidates, svm_bo),
-  output = "bo_search.mp4",
-  width = 760,
-  height = 760,
-  res = 100,
-  vfilter = 'framerate=fps=10', 
-  framerate = 1/3
-)
-```
 
 <video width="720" height="720" controls>
 <source src="bo_search.mp4" type="video/mp4">
@@ -577,34 +447,9 @@ The acceptance probabilities of simulated annealing allows the search to proceed
 
 How are the acceptance probabilities influenced? This heatmap shows how the acceptance probability can change over iterations, performance, and the user-specified coefficient: 
 
-```{r iterative-acceptance, echo = FALSE, dev = "png", fig.height = 4.5}
-get_accept_probs <- function(coef, pct_diff) {
-  # pct loss to abs value
-  candidate <- .8 - (pct_diff  * .8 /100) 
-  
-  x <- finetune:::acceptance_prob(0.8, candidate, 1:50, coef = coef, maximize = TRUE)
-  tibble(
-    `Acceptance Probability` = x,
-    iteration = 1:50,
-    pct_diff = pct_diff, 
-    coefficient = coef
-  )
-}
+<img src="figures/iterative-acceptance-1.png" width="672" style="display: block; margin: auto;" />
 
-prob_settings <- crossing(pct_diff = 1:10, coefficient = c(10, 20, 30)/1000)
-prob_res <- purrr::map2_dfr(prob_settings$coefficient, prob_settings$pct_diff, get_accept_probs)
-
-ggplot(prob_res, aes(x = iteration, y = pct_diff, fill = `Acceptance Probability`)) +
-  geom_raster() +
-  facet_wrap( ~ coefficient, labeller = label_both) +
-  scale_fill_gradientn(
-    colours = scales::brewer_pal(palette = "Greens")(8),
-    limits = 0:1
-  ) +
-  labs(y = "Percent Loss", x = "Iteration")
-```
-
-The user can adjust the coefficients to find a probability profile that suits their needs. In `finetune::control_sim_anneal()`, the default for this `cooling_coef` argument is `r control_sim_anneal()$cooling_coef`. Decreasing this coefficient will encourage the search to be more forgiving of poor results.
+The user can adjust the coefficients to find a probability profile that suits their needs. In `finetune::control_sim_anneal()`, the default for this `cooling_coef` argument is 0.02. Decreasing this coefficient will encourage the search to be more forgiving of poor results.
 
 This process continues for a set amount of iterations but can halt if no globally best results occur within a pre-determined number of iterations. However, it can be very helpful to set a _restart threshold_. If there are a string of failures, this feature revisits the last globally best parameter settings and starts anew.  
 
@@ -612,74 +457,17 @@ The main important detail is to define how to perturb the tuning parameters from
 
 In our implementation, the neighborhood is determined by scaling the current candidate to be between zero and one based on the range of the parameter object, so radius values between 0.05 and 0.15 seem reasonable. For these values, the fastest that the search could go from one side of the parameter space to the other is about 10 iterations. The size of the radius controls how quickly the search explores the parameter space. In our implementation, a range of radii is specified so different magnitudes of "local" define the new candidate values. 
 
-To illustrate, we'll use the two main `r pkg(glmnet)` tuning parameters: 
+To illustrate, we'll use the two main <span class="pkg">glmnet</span> tuning parameters: 
 
-* The amount of total regularization (`penalty`). The default range for this parameter is $10^{`r penalty()$range[[1]]`}$ to $10^{`r penalty()$range[[2]]`}$. It is typical to use a log (base 10) transformation for this parameter.  
+* The amount of total regularization (`penalty`). The default range for this parameter is $10^{-10}$ to $10^{0}$. It is typical to use a log (base 10) transformation for this parameter.  
 
 * The proportion of the lasso penalty (`mixture`). This is bounded at zero and one with no transformation.
 
-```{r iterative-neighborhood-calcs, echo = FALSE}
-glmn_param <- parameters(penalty(), mixture())
-pen_rng <- unlist(range_get(penalty(), original = TRUE))
-mix_rng <- 0:1
 
-iter_1 <- tibble(penalty = 0.025, mixture = .05)
-next_neighbors <- 
-  finetune:::random_real_neighbor(iter_1, iter_1, glmn_param, retain = 300) %>% 
-  mutate(Iteration = 1)
 
-set.seed(1)
-neighbors_values <- next_neighbors
-best_values <- iter_1 %>% mutate(Iteration = 1)
+The process starts with initial values of `penalty = 0.025` and `mixture = 0.050`. Using a radii that randomly fluctuates between 0.050 and 0.015, the data are appropriately scaled, random values are generated on radii around the initial point, then one is randomly chosen as the candidate. For illustration, we will assume that all candidate values are improvements. Using this new value, a set of new random neighbors are generated, one is chosen, and so on. This figure shows 6 iterations as the search proceeds toward the upper left corner: 
 
-scoring <- function(x) {
-  - log10(x$penalty) * .1 + x$mixture * 2 + rnorm(nrow(x), sd = .5)
-}
-
-path <- best_values
-
-for (i in 2:6) {
-  set.seed(i + 5)
-  next_scores <- scoring(next_neighbors)
-  next_ind <- which.max(next_scores)
-  next_value <- next_neighbors %>% slice(next_ind) %>% mutate(Iteration = i)
-  
-  best_values <- 
-    bind_rows(
-      best_values,
-      next_value
-    )
-  path <- bind_rows(path, best_values %>% mutate(Iteration = i))
-  
-  next_neighbors <- 
-    finetune:::random_real_neighbor(next_value %>% select(-Iteration), 
-                                    path %>% select(-Iteration), 
-                                    glmn_param, retain = 300) %>% 
-    mutate(Iteration = i)
-  neighbors_values <- 
-    bind_rows(
-      neighbors_values,
-      next_neighbors
-    )  
-}
-```
-
-The process starts with initial values of `penalty = 0.025` and `mixture = 0.050`. Using a radii that randomly fluctuates between 0.050 and 0.015, the data are appropriately scaled, random values are generated on radii around the initial point, then one is randomly chosen as the candidate. For illustration, we will assume that all candidate values are improvements. Using this new value, a set of new random neighbors are generated, one is chosen, and so on. This figure shows `r max(best_values$Iteration)` iterations as the search proceeds toward the upper left corner: 
-
-```{r iterative-neighborhood, echo = FALSE, message = FALSE, warning = FALSE}
-ggplot(neighbors_values, aes(x = penalty, y = mixture)) + 
-  geom_point(alpha = .3, size = 3/4, aes(col = factor(Iteration)), show.legend = FALSE) + 
-  scale_x_continuous(trans = "log10", limits = pen_rng) + 
-  scale_y_continuous(limits = mix_rng) + 
-  geom_point(data = best_values) + 
-  geom_path(data = path) + 
-  geom_point(data = path) + 
-  facet_wrap(~ Iteration, labeller = label_both) + 
-  labs(
-    x = paste(penalty()$label, "(penalty)"),
-    y = paste(mixture()$label, "(mixture)")
-  )
-```
+<img src="figures/iterative-neighborhood-1.svg" width="672" style="display: block; margin: auto;" />
 
 Note that, during some iterations, the candidate sets along the radius exclude points outside of the parameter boundaries. Also, our implementation biases the choice of the next tuning parameter configurations _away_ from new values that are very similar to previous configurations. 
 
@@ -701,44 +489,9 @@ The syntax for this function is nearly identical to `tune_bayes()`. There are no
 
 For the cell segmentation data, the syntax is very consistent with the previously used functions: 
 
-```{r iterative-cells-sa-calcs, include = FALSE}
-# As we did above, this chunk executes the code with some extra options that
-# capture the output and save some internal objects for plotting. 
 
-# This means that any changes to this chunk have to be made to the next chunk 
-# (where the code is shown and not executed).
 
-ctrl_sa <- control_sim_anneal(no_improve = 10L, verbose = TRUE, save_history = TRUE)
-
-tune_sim_anneal_sssshhh <- purrr::quietly(tune_sim_anneal)
-
-set.seed(1234)
-svm_sa_sshh <-
-  svm_wflow %>%
-  tune_sim_anneal_sssshhh(
-    resamples = cell_folds,
-    metrics = roc_res,
-    initial = svm_initial,
-    param_info = svm_param,
-    iter = 50,
-    control = ctrl_sa
-  )
-
-svm_sa <- svm_sa_sshh$result
-# verify_consistent_sa(svm_sa)
-svm_sa_output <- svm_sa_sshh$messages
-
-# We set tune_sim_anneal() to save a file to the temp directory. If the results
-# are cached, this file won't be there:
-try(
-  file.copy(
-    file.path(tempdir(), "sa_history.RData"),
-    "RData/sa_history.RData"
-  ),
-  silent = TRUE
-)
-```
-```{r iterative-cells-sa, eval = FALSE}
+```r
 ctrl_sa <- control_sim_anneal(verbose = TRUE, no_improve = 10L)
 
 set.seed(1234)
@@ -756,113 +509,61 @@ svm_sa <-
 
 
 
-```{r iterative-sa-history, include = FALSE}
-if (file.exists(file.path(tempdir(), "sa_history.RData"))) {
-  load(file.path(tempdir(), "sa_history.RData"))
-} else {
-  load("RData/sa_history.RData")
-}
 
-## -----------------------------------------------------------------------------
 
-restart_iter <- result_history$.iter[result_history$results == "restart from best"]
-restart_num <- length(restart_iter)
-sa_iter_list <- knitr::combine_words(restart_iter)
-restart_txt <- 
-  dplyr::case_when(
-    restart_num == 0 ~ paste0("There were no restarts during the search."),
-    restart_num == 1 ~ paste0("There was a single restart at iteration ", restart_iter)[1],
-    TRUE ~ paste0("There were ", restart_num, " restarts at iterations ", sa_iter_list)[1]
-  )
-discard_num<- length(result_history$.iter[result_history$results == "discard suboptimal"])
-if (discard_num > 0) {
-  restart_txt <-
-    paste0(
-      restart_txt, 
-      " as well as ", 
-      discard_num, 
-      " discarded ", 
-      ifelse(discard_num > 1, "candidates ", "candidate "),
-      "during the process."
-    )
-} else {
-  restart_txt <- paste0(restart_txt, ".")
-}
-
-## -----------------------------------------------------------------------------
-
-best_iters <- result_history$.iter[result_history$results == "new best"]
-best_init <- max(result_history$mean[result_history$.iter == 0])
-best_sa_res <- max(result_history$mean[result_history$.iter > 0])
-best_sa_inds <- result_history$.iter[which.max(result_history$mean)]
-best_txt <-
-  dplyr::case_when(
-    restart_num == 1 ~ paste0("a new global optimum once at iteration ", best_iters, "."),
-    TRUE ~ paste0("new global optimums at ", length(best_iters), " different iterations.")[1]
-  )
-best_txt <- best_txt[1]
-if (length(best_iters) > 1) {
-  best_txt <-
-    paste0(
-      best_txt,
-      " The earliest improvement was at iteration ",
-      min(best_iters),
-      " and the final optimum occured at iteration ",
-      max(best_iters),
-      ". The best overall results occured at iteration ", 
-      best_sa_inds, " with a mean area under the ROC curve of ",
-      round(best_sa_res, 4), " (compared to an initial best of ",
-      round(best_init, 4), ")."
-    )
-}
-```
-
-The simulated annealing process discovered `r best_txt` `r restart_txt`
+The simulated annealing process discovered new global optimums at 5 different iterations. The earliest improvement was at iteration 1 and the final optimum occured at iteration 30. The best overall results occured at iteration 30 with a mean area under the ROC curve of 0.8994 (compared to an initial best of 0.8663). There were 5 restarts at iterations 10, 20, 28, 38, and 46 as well as 22 discarded candidates during the process.
 
 The `verbose` option prints details of the search process. The output for the first five iterations was: 
 
-```{r iterative-cells-sa-print-start, echo = FALSE}
-so_stop_index <- grep("^ 5", svm_sa_output)
-if (length(so_stop_index) > 0) {
-  cat(svm_sa_output[1:so_stop_index], sep = "")
-}
+
+```
+#> Optimizing roc_auc
+#> Initial best: 0.86627
+#>  1 ♥ new best           roc_auc=0.87293	(+/-0.007638)
+#>  2 ♥ new best           roc_auc=0.89656	(+/-0.006779)
+#>  3 ─ discard suboptimal roc_auc=0.88247	(+/-0.00731)
+#>  4 ─ discard suboptimal roc_auc=0.8812	(+/-0.006122)
+#>  5 ◯ accept suboptimal  roc_auc=0.88226	(+/-0.007343)
 ```
 
 The last ten iterations: 
 
-```{r iterative-cells-sa-print-end, echo = FALSE}
-so_start_index <- grep("^40", svm_sa_output)
-so_stop_index <- grep("^50", svm_sa_output)
-if (length(so_stop_index) > 0) {
-  cat(svm_sa_output[so_start_index:so_stop_index], sep = "")
-}
+
+```
+#> 40 ◯ accept suboptimal  roc_auc=0.88085	(+/-0.007344)
+#> 41 ─ discard suboptimal roc_auc=0.86666	(+/-0.008092)
+#> 42 + better suboptimal  roc_auc=0.89618	(+/-0.006138)
+#> 43 ─ discard suboptimal roc_auc=0.88671	(+/-0.007333)
+#> 44 ─ discard suboptimal roc_auc=0.87231	(+/-0.008932)
+#> 45 ◯ accept suboptimal  roc_auc=0.88738	(+/-0.007331)
+#> 46 x restart from best  roc_auc=0.86578	(+/-0.008143)
+#> 47 ◯ accept suboptimal  roc_auc=0.89921	(+/-0.006862)
+#> 48 ─ discard suboptimal roc_auc=0.87691	(+/-0.007439)
+#> 49 ─ discard suboptimal roc_auc=0.85089	(+/-0.009562)
+#> 50 ─ discard suboptimal roc_auc=0.88818	(+/-0.007241)
 ```
 
 As with the other `tune_*()` functions, the corresponding `autoplot()` function produces visual assessments of the results: 
 
-```{r interative-sa-performance, fig.height = 4.25}
+
+```r
 autoplot(svm_sa, type = "performance")
 ```
 
+<img src="figures/interative-sa-performance-1.svg" width="672" style="display: block; margin: auto;" />
+
 To show how the parameters change over iterations: 
 
-```{r interative-sa-parameters, fig.height = 4.00}
+
+```r
 autoplot(svm_sa, type = "parameters")
 ```
 
+<img src="figures/interative-sa-parameters-1.svg" width="672" style="display: block; margin: auto;" />
+
 A visualization of the search path helps to understand where the search process did well and where it went astray:  
 
-```{r iterative-sa-plot, include = FALSE}
-av_capture_graphics(
-  sa_2d_plot(svm_sa, result_history, svm_large),
-  output = "sa_search.mp4",
-  width = 720,
-  height = 720,
-  res = 120,
-  vfilter = 'framerate=fps=10', 
-  framerate = 1/3
-)
-```
+
 
 <video width="720" height="720" controls>
   <source src="sa_search.mp4" type="video/mp4">
@@ -872,7 +573,7 @@ Like `tune_bayes()`, manually stopping execution will return the completed itera
 
 ## Chapter summary {#iterative-summary}
 
-This chapter describes two iterative search methods for optimizing tuning parameters. Both can be effective at finding good values alone or as a follow-up method that is used after an initial grid search to further `r pkg(finetune)` performance. 
+This chapter describes two iterative search methods for optimizing tuning parameters. Both can be effective at finding good values alone or as a follow-up method that is used after an initial grid search to further <span class="pkg">finetune</span> performance. 
 
 
 

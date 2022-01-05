@@ -156,7 +156,7 @@ lm_form_fit
 lm_xy_fit
 #> parsnip model object
 #> 
-#> Fit time:  2ms 
+#> Fit time:  1ms 
 #> 
 #> Call:
 #> stats::lm(formula = ..y ~ ., data = data)

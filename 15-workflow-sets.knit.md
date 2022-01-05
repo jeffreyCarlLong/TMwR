@@ -1,26 +1,5 @@
 
-```{r workflow-sets-startup, include = FALSE}
-knitr::opts_chunk$set(fig.path = "figures/")
-library(tidymodels)
-library(workflowsets)
-library(baguette)
-library(rules)
-library(finetune)
-# install.packages("xgboost")
-library(xgboost)
-tidymodels_prefer()
-caching <- FALSE
 
-cores <- parallel::detectCores()
-if (!grepl("mingw32", R.Version()$platform)) {
- library(doMC)
- registerDoMC(cores = cores)
-} else {
-  library(doParallel)
-  cl <- makePSOCKcluster(cores)
-  registerDoParallel(cl)
-}
-```
 
 # Screening many models  {#workflow-sets}
 
@@ -40,11 +19,23 @@ Let's use the concrete data from _Applied Predictive Modeling_ [@apm] as an exam
 
 First, let's define the data splitting and resampling schemes.
 
-```{r workflow-sets-data}
+
+```r
 library(tidymodels)
 tidymodels_prefer()
 data(concrete, package = "modeldata")
 glimpse(concrete)
+#> Rows: 1,030
+#> Columns: 9
+#> $ cement               <dbl> 540.0, 540.0, 332.5, 332.5, 198.6, 266.0, 380.0, 380.…
+#> $ blast_furnace_slag   <dbl> 0.0, 0.0, 142.5, 142.5, 132.4, 114.0, 95.0, 95.0, 114…
+#> $ fly_ash              <dbl> 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,…
+#> $ water                <dbl> 162, 162, 228, 228, 192, 228, 228, 228, 228, 228, 192…
+#> $ superplasticizer     <dbl> 2.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0…
+#> $ coarse_aggregate     <dbl> 1040.0, 1055.0, 932.0, 932.0, 978.4, 932.0, 932.0, 93…
+#> $ fine_aggregate       <dbl> 676.0, 676.0, 594.0, 594.0, 825.5, 670.0, 594.0, 594.…
+#> $ age                  <int> 28, 28, 270, 365, 360, 90, 365, 28, 28, 28, 90, 28, 2…
+#> $ compressive_strength <dbl> 79.99, 61.89, 40.27, 41.05, 44.30, 47.03, 43.70, 36.4…
 ```
 
 The `compressive_strength` column is the outcome. The `age` predictor tells us the age of the concrete sample at testing in days (concrete strengthens over time) and the rest of the predictors like `cement` and `water` are concrete components in units of kilograms per cubic meter.
@@ -55,18 +46,21 @@ There are some cases in this data set where the same concrete formula was tested
 
 To address this, we will use the mean compressive strength per concrete mixture for modeling. 
 
-```{r workflow-sets-means}
+
+```r
 concrete <- 
    concrete %>% 
    group_by(across(-compressive_strength)) %>% 
    summarize(compressive_strength = mean(compressive_strength),
              .groups = "drop")
 nrow(concrete)
+#> [1] 992
 ```
 
 Let's split the data using the default 3:1 ratio of training-to-test and resample the training set using five repeats of 10-fold cross-validation. 
 
-```{r workflow-sets-splitting}
+
+```r
 set.seed(1501)
 concrete_split <- initial_split(concrete, strata = compressive_strength)
 concrete_train <- training(concrete_split)
@@ -79,7 +73,8 @@ concrete_folds <-
 
 Some models (notably neural networks, K-nearest neighbors, and support vector machines) require predictors that have been centered and scaled, so some model workflows will require recipes with these preprocessing steps. For other models, a traditional response surface design model expansion (i.e., quadratic and two-way interactions) is a good idea. For these purposes, we create two recipes: 
 
-```{r workflow-sets-recipes}
+
+```r
 normalized_rec <- 
    recipe(compressive_strength ~ ., data = concrete_train) %>% 
    step_normalize(all_predictors()) 
@@ -90,9 +85,10 @@ poly_recipe <-
    step_interact(~ all_predictors():all_predictors())
 ```
 
-For the models, we use the the `r pkg(parsnip)` addin to create a set of model specifications: 
+For the models, we use the the <span class="pkg">parsnip</span> addin to create a set of model specifications: 
 
-```{r workflow-sets-models}
+
+```r
 library(rules)
 library(baguette)
 
@@ -153,7 +149,8 @@ cubist_spec <-
 
 The analysis in @apm specifies that the neural network should have up to 27 hidden units in the layer. The `parameters()` function creates a parameter set that we modify to have the correct parameter range.
 
-```{r workflow-sets-param}
+
+```r
 nnet_param <- 
    nnet_spec %>% 
    parameters() %>% 
@@ -168,11 +165,12 @@ Workflow sets take named lists of preprocessors and model specifications and com
 
 * A standard R formula
 * A recipe object (prior to estimation/prepping)
-* A `r pkg(dplyr)`-style selector to choose the outcome and predictors
+* A <span class="pkg">dplyr</span>-style selector to choose the outcome and predictors
 
 As a first workflow set example, let's combine the recipe that only standardizes the predictors to the nonlinear models that require that the predictors be in the same units. 
 
-```{r workflow-sets-normalized}
+
+```r
 normalized <- 
    workflow_set(
       preproc = list(normalized = normalized_rec), 
@@ -180,32 +178,67 @@ normalized <-
                     KNN = knn_spec, neural_network = nnet_spec)
    )
 normalized
+#> # A workflow set/tibble: 4 × 4
+#>   wflow_id                  info             option    result    
+#>   <chr>                     <list>           <list>    <list>    
+#> 1 normalized_SVM_radial     <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 2 normalized_SVM_poly       <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 3 normalized_KNN            <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 4 normalized_neural_network <tibble [1 × 4]> <opts[0]> <list [0]>
 ```
 
 Since there is only a single preprocessor, this function creates a set of workflows with this value. If the preprocessor contained more than one entry, the function would create all combinations of preprocessors and models. 
 
 The `wflow_id` column is automatically created but can be modified using a call to `mutate()`. The `info` column contains a tibble with some identifiers and the workflow object. The workflow can be extracted: 
 
-```{r workflow-sets-get-workflow}
+
+```r
 normalized %>% extract_workflow(id = "normalized_KNN")
+#> ══ Workflow ═════════════════════════════════════════════════════════════════════════
+#> Preprocessor: Recipe
+#> Model: nearest_neighbor()
+#> 
+#> ── Preprocessor ─────────────────────────────────────────────────────────────────────
+#> 1 Recipe Step
+#> 
+#> • step_normalize()
+#> 
+#> ── Model ────────────────────────────────────────────────────────────────────────────
+#> K-Nearest Neighbor Model Specification (regression)
+#> 
+#> Main Arguments:
+#>   neighbors = tune()
+#>   weight_func = tune()
+#>   dist_power = tune()
+#> 
+#> Computational engine: kknn
 ```
 
 The `option` column is a placeholder for any arguments to use when we evaluate the workflow. For example, to add the neural network parameter object:  
 
-```{r workflow-sets-info-update}
+
+```r
 normalized <- 
    normalized %>% 
    option_add(param_info = nnet_param, id = "normalized_neural_network")
 normalized
+#> # A workflow set/tibble: 4 × 4
+#>   wflow_id                  info             option    result    
+#>   <chr>                     <list>           <list>    <list>    
+#> 1 normalized_SVM_radial     <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 2 normalized_SVM_poly       <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 3 normalized_KNN            <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 4 normalized_neural_network <tibble [1 × 4]> <opts[1]> <list [0]>
 ```
 
-When a function from the `r pkg(tune)` or `r pkg(finetune)` package is used to tune (or resample) the workflow, this argument will be used. 
+When a function from the <span class="pkg">tune</span> or <span class="pkg">finetune</span> package is used to tune (or resample) the workflow, this argument will be used. 
 
 The `result` column is a placeholder for the output of the tuning or resampling functions.  
 
-For the other nonlinear models, let's create another workflow set that uses `r pkg(dplyr)` selectors for the outcome and predictors: 
+For the other nonlinear models, let's create another workflow set that uses <span class="pkg">dplyr</span> selectors for the outcome and predictors: 
 
-```{r workflow-sets-selectors}
+
+```r
 model_vars <- 
    workflow_variables(outcomes = compressive_strength, 
                       predictors = everything())
@@ -217,11 +250,21 @@ no_pre_proc <-
                     RF = rf_spec, boosting = xgb_spec, Cubist = cubist_spec)
    )
 no_pre_proc
+#> # A workflow set/tibble: 6 × 4
+#>   wflow_id           info             option    result    
+#>   <chr>              <list>           <list>    <list>    
+#> 1 simple_MARS        <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 2 simple_CART        <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 3 simple_CART_bagged <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 4 simple_RF          <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 5 simple_boosting    <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 6 simple_Cubist      <tibble [1 × 4]> <opts[0]> <list [0]>
 ```
 
 Finally, the set that uses nonlinear terms and interactions with the appropriate models are assembled: 
 
-```{r workflow-sets-quad}
+
+```r
 with_features <- 
    workflow_set(
       preproc = list(full_quad = poly_recipe), 
@@ -231,12 +274,23 @@ with_features <-
 
 These objects are tibbles with the extra class of `workflow_set`. Row binding does not affect the state of the sets and the result is itself a workflow set:
 
-```{r workflow-sets-complete}
+
+```r
 all_workflows <- 
    bind_rows(no_pre_proc, normalized, with_features) %>% 
    # Make the workflow ID's a little more simple: 
    mutate(wflow_id = gsub("(simple_)|(normalized_)", "", wflow_id))
 all_workflows
+#> # A workflow set/tibble: 12 × 4
+#>   wflow_id    info             option    result    
+#>   <chr>       <list>           <list>    <list>    
+#> 1 MARS        <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 2 CART        <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 3 CART_bagged <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 4 RF          <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 5 boosting    <tibble [1 × 4]> <opts[0]> <list [0]>
+#> 6 Cubist      <tibble [1 × 4]> <opts[0]> <list [0]>
+#> # … with 6 more rows
 ```
 
 ## Tuning and evaluating the models
@@ -245,7 +299,8 @@ Almost all of these workflows contain tuning parameters. In order to evaluate th
 
 For this example, grid search is applied to each workflow using up to 25 different parameter candidates. There are a set of common options to use with each execution of `tune_grid()`. For example, we will use the same resampling and control objects for each workflow, along with a grid size of 25. The `workflow_map()` function has an additional argument called `seed` that is used to ensure that each execution of `tune_grid()` consumes the same random numbers. 
 
-```{r workflow-sets-grid, eval = FALSE}
+
+```r
 grid_ctrl <-
    control_grid(
       save_pred = TRUE,
@@ -265,193 +320,28 @@ grid_results <-
 
 The results show that the `option` and `result` columns have been updated:
 
-```{r workflow-sets-grid-comparison, include = TRUE, cache = caching}
-grid_ctrl <-
-   control_grid(
-      save_pred = TRUE,
-      parallel_over = "everything",
-      save_workflow = TRUE
-   )
-
-full_results_time <- 
-   system.time(
-      grid_results <- 
-         all_workflows %>% 
-         workflow_map(seed = 1503, resamples = concrete_folds, grid = 25, 
-                      control = grid_ctrl, verbose = TRUE)
-   )
-
-num_grid_models <- nrow(collect_metrics(grid_results, summarize = FALSE))
-```
-
-```{r workflow-sets-grid-print}
-grid_results
-```
-
-The `option` column now contains all of the options that we used in the `workflow_map()` call. This makes our results reproducible. In the `result` columns, the "`tune[+]`" and "`rsmp[+]`" notations mean that the object had no issues. A value such as "`tune[x]`" occurs if all of the models failed for some reason. 
-
-There are a few convenience functions for examining the results. The `rank_results()` function will order the models by some performance metric. By default, it uses the first metric in the metric set (RMSE in this instance). 
-
-```{r workflow-sets-rank}
-grid_results %>% 
-   rank_results() %>% 
-   filter(.metric == "rmse") %>% 
-   select(model, .config, rmse = mean, rank)
-```
-
-Also by default, the function ranks all of the candidate sets; that's why the same model can show up multiple times in the output. An option, called `select_best`, can be used to rank the models using their best tuning parameter combination. 
-
-The `autoplot()` method plots the rankings; it also has a `select_best` argument. In the plot below, the best results for each model are visualized. 
-
-```{r workflow-sets-plot-rank, out.width = '100%', fig.width=8, fig.height=5.75}
-autoplot(
-   grid_results,
-   rank_metric = "rmse",  # <- how to order models
-   metric = "rmse",       # <- which metric to visualize
-   select_best = TRUE     # <- one point per workflow
-)
-```
-
-In case you want to see the tuning parameter results for a specific model, the `id` argument can take a single value from the `wflow_id` column for which model to plot: 
-
-```{r workflow-sets-plot-model, out.width = '100%', fig.width=8, fig.height=4.5}
-autoplot(grid_results, id = "Cubist", metric = "rmse")
-```
-
-There are also methods for `collect_predictions()` and `collect_metrics()`. 
-
-This approach to model screening fits a total of `r format(num_grid_models, big.mark = ",")` models. Using `r cores` workers in parallel, the estimation process took  `r round(full_results_time[3]/60/60, 1)` hours to complete.
-
-## Efficiently screening models {#racing-example}
-
-One effective method for screening a large set of models efficiently is to use the racing approach described in Section \@ref(racing). With a workflow set, we can use the `workflow_map()` function for this racing approach. Recall that after we pipe in our workflow set, the argument we use is the _function_ to apply to the workflows; in this case, we can use a value of `"tune_race_anova"`. We also pass an appropriate control object; otherwise the options would be the same as the code in the previous section. 
 
 
-```{r workflow-sets-race, eval = FALSE}
-library(finetune)
-
-race_ctrl <-
-   control_race(
-      save_pred = TRUE,
-      parallel_over = "everything",
-      save_workflow = TRUE
-   )
-
-race_results <-
-   all_workflows %>%
-   workflow_map(
-      "tune_race_anova",
-      seed = 1503,
-      resamples = concrete_folds,
-      grid = 25,
-      control = race_ctrl
-   )
-```
 
 
-```{r workflow-sets-race-comp, include = FALSE, cache = caching}
-race_ctrl <-
-   control_race(
-      save_pred = TRUE,
-      parallel_over = "everything",
-      save_workflow = TRUE
-   )
-
-race_results_time <- 
-   system.time(
-      race_results <- 
-         all_workflows %>% 
-         workflow_map("tune_race_anova", 
-                      seed = 1503,  resamples = concrete_folds, grid = 25, 
-                      control = race_ctrl)
-   )
-
-num_race_models <- sum(collect_metrics(race_results)$n)
-```
-
-The new object looks very similar, although the elements of the `result` column show a value of `"race[+]"`, indicating a different type of object: 
-
-```{r workflow-sets-race-print}
-race_results
-```
-
-The same helpful functions are available for this object to interrogate the results and, in fact, the basic `autoplot()` method produces similar trends:
 
 
-```{r workflow-sets-plot-race-rank, out.width = '100%', fig.width=8, fig.height=5.75}
-autoplot(
-   race_results,
-   rank_metric = "rmse",  
-   metric = "rmse",       
-   select_best = TRUE    
-)
-```
 
 
-Overall, the racing approach estimated a total of `r format(num_race_models, big.mark = ",")` models, `r round(num_race_models/num_grid_models*100, 2)`% of the full set of `r format(num_grid_models, big.mark = ",")` models in the full grid. As a result, the racing approach was `r round(full_results_time[3]/race_results_time[3], 2)`-fold faster. 
 
-Did we get similar results? For both objects, we rank the results, merge them together, and plot them against one another: 
 
-```{r workflow-sets-racing-concordance, out.width="100%"}
-matched_results <- 
-   rank_results(race_results, select_best = TRUE) %>% 
-   select(wflow_id, .metric, race = mean, config_race = .config) %>% 
-   inner_join(
-      rank_results(grid_results, select_best = TRUE) %>% 
-         select(wflow_id, .metric, complete = mean, 
-                config_complete = .config, model),
-      by = c("wflow_id", ".metric"),
-   ) %>%  
-   filter(.metric == "rmse")
 
-matched_results %>% 
-   ggplot(aes(x = complete, y = race)) + 
-   geom_abline(lty = 3) + 
-   geom_point(aes(col = model)) + 
-   coord_obs_pred() + 
-   labs(x = "Complete Grid RMSE", y = "Racing RMSE")
-```
 
-While the racing approach selected the same candidate parameters as the complete grid for only `r round(mean(matched_results$config_race == matched_results$config_complete) * 100, 2)`% of the models, the performance metrics of the models selected by racing were nearly equal. The  correlation of RMSE values was `r signif(cor(matched_results$race, matched_results$complete), 3)` and the rank correlation was `r signif(cor(matched_results$race, matched_results$complete, method = "spearman"), 3)`. This indicates that, within a model, there were multiple tuning parameter combinations that had nearly identical results. 
 
-## Finalizing a model
 
-Similar to what we have shown in previous chapters, choosing the final model and fitting it on the training set is straightforward. The first step is to pick a workflow to finalize. Since the boosted tree model worked well, we'll extract that from the set, update the parameters with the numerically best settings, and fit to the training set: 
 
-```{r workflow-sets-finalize}
-best_results <- 
-   race_results %>% 
-   extract_workflow_set_result("boosting") %>% 
-   select_best(metric = "rmse")
-best_results
 
-boosting_test_results <- 
-   race_results %>% 
-   extract_workflow("boosting") %>% 
-   finalize_workflow(best_results) %>% 
-   last_fit(split = concrete_split)
-```
 
-The test set results show:
 
-```{r workflow-sets-test-results}
-collect_metrics(boosting_test_results)
 
-boosting_test_results %>% 
-   collect_predictions() %>% 
-   ggplot(aes(x = compressive_strength, y = .pred)) + 
-   geom_abline(col = "green", lty = 2) + 
-   geom_point(alpha = 0.5) + 
-   coord_obs_pred() + 
-   labs(x = "observed", y = "predicted")
-```
 
-## Chapter summary {#workflow-sets-summary}
 
-Often a data practitioner needs to consider a large number of possible modeling approaches for a task at hand. This chapter illustrates how to use workflow sets to investigate multiple models or feature engineering strategies in such a situation. Racing methods can more efficiently rank models than fitting every candidate model being considered. 
 
-```{r workflow-sets-save, include = FALSE}
-save(concrete_test, concrete_split, grid_results, race_results, 
-     boosting_test_results,
-     file = "RData/concrete_results.RData", version = 2, compress = "xz")
-```
+
+
+
