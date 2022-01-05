@@ -1,6 +1,11 @@
 .Rproj.user
 .Rhistory
 .RData
+_cache
+.mp4
+.rds
+RData/
+_cache/
 .Ruserdata
 .DS_Store
 _book
